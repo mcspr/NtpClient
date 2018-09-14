@@ -215,8 +215,7 @@ void NTPClient::_dns_found_cb (const char *name, const ip_addr_t *ipaddr, void *
         return;
     }
 
-    IPAddress addr(ipaddr->addr);
-    reinterpret_cast<NTPClient*> (arg)->_async_getTime (addr);
+    reinterpret_cast<NTPClient*> (arg)->_async_getTime (IPAddress(ipaddr->addr));
 }
 
 
