@@ -511,14 +511,14 @@ private:
     */
     //bool sendNTPpacket(IPAddress &address);
 
-    #ifdef NETWORK_TYPE == NETWORK_ESP8266 || NETWORK_TYPE == NETWORK_ESP32
+    #if NETWORK_TYPE == NETWORK_ESP8266 || NETWORK_TYPE == NETWORK_ESP32
     /**
      * Internal callback for dns resolution
     */
     #if LWIP_VERSION_MAJOR == 1
     void _dns_found_cb(const char *, ip_addr_t *, void *);
     #else
-    void _dns_found_cb(const char *, const ip_addr *, void *);
+    void _dns_found_cb(const char *, const ip_addr_t *, void *);
     #endif
 
     void _async_getTime(IPAddress);
