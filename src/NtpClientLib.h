@@ -102,18 +102,14 @@ const int NTP_PACKET_SIZE = 48; // NTP time is in the first 48 bytes of message
 #error "Incorrect platform. Only ARDUINO and ESP8266 MCUs are valid."
 #endif // NETWORK_TYPE
 
-/*
 #if ((NETWORK_TYPE == NETWORK_ESP32) || (NETWORK_TYPE == NETWORK_ESP8266))
 extern "C" {
-  #include "lwip/opt.h"
-  #include "lwip/tcp.h"
-  #include "lwip/inet.h"
-  #include "lwip/dns.h"
-  #include "lwip/err.h"
-  #include "lwip/init.h"
+  #include "lwip/inet.h" // ip_addr_t
+  #include "lwip/dns.h" // dns_gethostbyname
+  #include "lwip/err.h" // ERR_OK
+  #include "lwip/init.h" // LWIP_VERSION_MAJOR
 }
 #endif
-*/
 
 typedef enum {
     timeSyncd = 0, // Time successfully got from NTP server
