@@ -207,7 +207,7 @@ void NTPClient::_async_getTime (IPAddress ip) {
 #if LWIP_VERSION_MAJOR == 1
 void NTPClient::_dns_found_cb (const char *name, ip_addr_t *ipaddr, void *arg) {
 #else
-void NTPClient::_dns_found_cb (const char *name, const ip_addr *ipaddr, void *arg){
+void NTPClient::_dns_found_cb (const char *name, const ip_addr *ipaddr, void *arg) {
 #endif
     if (!ipaddr) {
         if (onSyncEvent)
