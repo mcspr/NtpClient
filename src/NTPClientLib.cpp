@@ -182,9 +182,10 @@ time_t NTPClient::getTime () {
     return 0; // return 0 if unable to get the time
 }
 #elif NETWORK_TYPE == NETWORK_ESP8266 || NETWORK_TYPE == NETWORK_ESP32
-void NTPClient::_async_getTime (IPAddress ip) {
-    DEBUGLOG ("Trying to connect to IP: %s\n", ip.toString ().c_str ());
-    if (udp->connect (ip, DEFAULT_NTP_PORT)) {
+
+void NTPClient::_async_getTime (const ip_addr_t *ipaddr) {
+    DEBUGLOG ("Trying to connect to NTP server\n");
+    if (udp->connect (ipaddr, DEFAULT_NTP_PORT)) {
         udp->onPacket (std::bind (&NTPClient::processPacket, this, std::placeholders::_1));
         DEBUGLOG ("Sending UDP packet\n");
         if (sendNTPpacket (udp)) {
@@ -204,18 +205,22 @@ void NTPClient::_async_getTime (IPAddress ip) {
     }
 }
 
-#if LWIP_VERSION_MAJOR == 1
-void NTPClient::_dns_found_cb (const char *name, ip_addr_t *ipaddr, void *arg) {
-#else
+void NTPClient::_async_getTime (ip_addr_t *ipaddr) {
+    _async_getTime (static_cast<const ip_addr_t*>(ipaddr));
+}
+
+#if LWIP_VERSION_MAJOR == 2 || defined(ARDUINO_ARCH_ESP32)
 void NTPClient::_dns_found_cb (const char *name, const ip_addr_t *ipaddr, void *arg) {
+#else
+void NTPClient::_dns_found_cb (const char *name, ip_addr_t *ipaddr, void *arg) {
 #endif
+    NTPClient *client = reinterpret_cast<NTPClient*>(arg);
     if (!ipaddr) {
-        if (onSyncEvent)
-            onSyncEvent (invalidAddress);
+        if (client->onSyncEvent)
+            client->onSyncEvent (invalidAddress);
         return;
     }
-
-    reinterpret_cast<NTPClient*> (arg)->_async_getTime (IPAddress(ipaddr->addr));
+    client->_async_getTime (ipaddr);
 }
 
 
@@ -225,10 +230,14 @@ time_t NTPClient::getTime () {
     ip_addr_t timeServerIP;
     err_t error = dns_gethostbyname (getNtpServerName ().c_str (), &timeServerIP, (dns_found_callback)&_dns_found_cb, this);
     if (error == ERR_OK) {
-        DEBUGLOG ("gethostbyname resolution OK, host:%s ip:%s\n", getNtpServerName ().c_str (), timeServerIP.toString ());
-        _async_getTime (timeServerIP);
+        DEBUGLOG ("gethostbyname resolution OK\n");
+        _async_getTime(&timeServerIP);
     } else {
-        DEBUGLOG ("gethostbyname error %d\n", error);
+        #ifdef LWIP_DEBUG
+        DEBUGLOG ("gethostbyname error: %s\n", lwip_strerr(error));
+        #else
+        DEBUGLOG ("gethostbyname error: %d\n", error);
+        #endif
         if (onSyncEvent)
             onSyncEvent (invalidAddress);
     }

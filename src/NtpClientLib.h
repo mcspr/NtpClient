@@ -511,13 +511,14 @@ private:
     /**
      * Internal callback for dns resolution
     */
-    #if LWIP_VERSION_MAJOR == 1
-    static void _dns_found_cb(const char *, ip_addr_t *, void *);
-    #else
+    #if LWIP_VERSION_MAJOR == 2 || defined(ARDUINO_ARCH_ESP32)
     static void _dns_found_cb(const char *, const ip_addr_t *, void *);
+    #else
+    static void _dns_found_cb(const char *, ip_addr_t *, void *);
     #endif
 
-    void _async_getTime(IPAddress);
+    void _async_getTime(ip_addr_t *);
+    void _async_getTime(const ip_addr_t *);
     #endif
 };
 
