@@ -512,9 +512,9 @@ private:
      * Internal callback for dns resolution
     */
     #if LWIP_VERSION_MAJOR == 1
-    void _dns_found_cb(const char *, ip_addr_t *, void *);
+    static void _dns_found_cb(const char *, ip_addr_t *, void *);
     #else
-    void _dns_found_cb(const char *, const ip_addr_t *, void *);
+    static void _dns_found_cb(const char *, const ip_addr_t *, void *);
     #endif
 
     void _async_getTime(IPAddress);
