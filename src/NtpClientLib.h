@@ -40,16 +40,6 @@ or implied, of German Martin
 
 //#define DEBUG_NTPCLIENT //Uncomment this to enable debug messages over serial port
 
-#ifdef ESP8266
-//extern "C" {
-//#include "user_interface.h"
-//#include "sntp.h"
-//}
-#include <functional>
-using namespace std;
-using namespace placeholders;
-#endif
-
 #include <TimeLib.h>
 
 #if defined(ARDUINO) && ARDUINO >= 100
@@ -84,7 +74,7 @@ const int NTP_PACKET_SIZE = 48; // NTP time is in the first 48 bytes of message
 #define NETWORK_TYPE NETWORK_WIFI101 // SET YOUR NETWORK INTERFACE
 #elif defined ARDUINO_ARCH_AVR
 #define NETWORK_TYPE NETWORK_W5100
-#elif defined ARDUINO_ARCH_ESP32 || defined ESP32
+#elif defined ARDUINO_ARCH_ESP32
 #define NETWORK_TYPE NETWORK_ESP32
 #endif
 
@@ -99,16 +89,20 @@ const int NTP_PACKET_SIZE = 48; // NTP time is in the first 48 bytes of message
 #include <WiFiUdp.h>
 #include <WiFi101.h>
 #elif NETWORK_TYPE == NETWORK_ESP8266
+#include <functional>
 #include <ESP8266WiFi.h>
 #include <ESPAsyncUDP.h>
 #include <Ticker.h>
 #elif NETWORK_TYPE == NETWORK_ESP32
+#include <functional>
 #include <WiFi.h>
-#include <ESPAsyncUDP.h>
+#include <AsyncUDP.h>
 #include <Ticker.h>
 #else
 #error "Incorrect platform. Only ARDUINO and ESP8266 MCUs are valid."
 #endif // NETWORK_TYPE
+
+#define NETWORK_ESP ((NETWORK_TYPE == NETWORK_ESP32) || (NETWORK_TYPE == NETWORK_ESP8266))
 
 typedef enum {
     timeSyncd = 0, // Time successfully got from NTP server
@@ -505,7 +499,19 @@ private:
     * @param[out] True if everything went ok.
     */
     //bool sendNTPpacket(IPAddress &address);
-//#endif
+
+    #ifdef NETWORK_TYPE == NETWORK_ESP8266 || NETWORK_TYPE == NETWORK_ESP32
+    /**
+     * Internal callback for dns resolution
+    */
+    #if LWIP_VERSION_MAJOR == 1
+    void _dns_found_cb(const char *, ip_addr_t *, void *);
+    #else
+    void _dns_found_cb(const char *, const ip_addr *, void *);
+    #endif
+
+    void _async_getTime(IPAddress);
+    #endif
 };
 
 extern NTPClient NTP;
