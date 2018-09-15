@@ -183,14 +183,26 @@ time_t NTPClient::getTime () {
 }
 #elif NETWORK_TYPE == NETWORK_ESP8266 || NETWORK_TYPE == NETWORK_ESP32
 
-void NTPClient::_async_getTime (const ip_addr_t *ipaddr) {
+void NTPClient::async_getTime (const ip_addr_t *ipaddr) {
     DEBUGLOG ("Trying to connect to NTP server\n");
+
+    // XXX broken on esp32: if called inside dns_found_callback, udp must use lwip methods directly
+#if NETWORK_TYPE == NETWORK_ESP32
+    if (ipaddr->type == IPADDR_TYPE_V4) {
+        DEBUGLOG ("using ip4: %s\n", ip4addr_ntoa(&(ipaddr->u_addr.ip4)));
+    }
+    if (ipaddr->type == IPADDR_TYPE_V6) {
+        DEBUGLOG ("using ip6: %s\n", ip6addr_ntoa(&(ipaddr->u_addr.ip6)));
+    }
     if (udp->connect (ipaddr, DEFAULT_NTP_PORT)) {
+#else
+    if (udp->connect (IPAddress(ipaddr->addr), DEFAULT_NTP_PORT)) {
+#endif
         udp->onPacket (std::bind (&NTPClient::processPacket, this, std::placeholders::_1));
         DEBUGLOG ("Sending UDP packet\n");
+        status = requested;
         if (sendNTPpacket (udp)) {
             DEBUGLOG ("NTP request sent\n");
-            status = requested;
             responseTimer.once_ms (ntpTimeout, &NTPClient::s_processRequestTimeout, static_cast<void*>(this));
             if (onSyncEvent)
                 onSyncEvent (requestSent);
@@ -200,13 +212,10 @@ void NTPClient::_async_getTime (const ip_addr_t *ipaddr) {
                 onSyncEvent (errorSending);
         }
     } else {
+        DEBUGLOG ("NTP no response\n");
         if (onSyncEvent)
             onSyncEvent (noResponse);
     }
-}
-
-void NTPClient::_async_getTime (ip_addr_t *ipaddr) {
-    _async_getTime (static_cast<const ip_addr_t*>(ipaddr));
 }
 
 #if LWIP_VERSION_MAJOR == 2 || defined(ARDUINO_ARCH_ESP32)
@@ -214,13 +223,19 @@ void NTPClient::_dns_found_cb (const char *name, const ip_addr_t *ipaddr, void *
 #else
 void NTPClient::_dns_found_cb (const char *name, ip_addr_t *ipaddr, void *arg) {
 #endif
-    NTPClient *client = reinterpret_cast<NTPClient*>(arg);
+    DEBUGLOG ("_dns_found_cb: %s\n", name);
+    NTPClient *c = reinterpret_cast<NTPClient*>(arg);
+
     if (!ipaddr) {
-        if (client->onSyncEvent)
-            client->onSyncEvent (invalidAddress);
+        DEBUGLOG ("_dns_found_cb no ipaddr\n");
+        if (c->onSyncEvent)
+            c->onSyncEvent (invalidAddress);
         return;
     }
-    client->_async_getTime (ipaddr);
+
+    // TODO this just hangs the process!
+    // dns is cached, next loop will resolve time
+    c->async_getTime (ipaddr);
 }
 
 
@@ -231,15 +246,17 @@ time_t NTPClient::getTime () {
     err_t error = dns_gethostbyname (getNtpServerName ().c_str (), &timeServerIP, (dns_found_callback)&_dns_found_cb, this);
     if (error == ERR_OK) {
         DEBUGLOG ("gethostbyname resolution OK\n");
-        _async_getTime(&timeServerIP);
+        async_getTime(&timeServerIP);
+        return 0;
+    } else if (error == ERR_INPROGRESS) {
+        DEBUGLOG ("gethostbyname is in progress\n");
+        return 0;
     } else {
-        #ifdef LWIP_DEBUG
-        DEBUGLOG ("gethostbyname error: %s\n", lwip_strerr(error));
-        #else
-        DEBUGLOG ("gethostbyname error: %d\n", error);
-        #endif
         if (onSyncEvent)
             onSyncEvent (invalidAddress);
+        #ifdef LWIP_DEBUG
+        DEBUGLOG ("gethostbyname error: %s\n", lwip_strerr(error));
+        #endif
     }
 
     return 0;
@@ -260,6 +277,7 @@ void dumpNTPPacket (byte *data, size_t length) {
 }
 
 boolean NTPClient::sendNTPpacket (AsyncUDP *udp) {
+    DEBUGLOG ("sendNTPpacket\n");
     AsyncUDPMessage ntpPacket = AsyncUDPMessage ();
 
     uint8_t ntpPacketBuffer[NTP_PACKET_SIZE]; //Buffer to store request message
@@ -290,6 +308,7 @@ boolean NTPClient::sendNTPpacket (AsyncUDP *udp) {
 }
 
 void NTPClient::processPacket (AsyncUDPPacket packet) {
+    DEBUGLOG ("processPacket\n");
     uint8_t *ntpPacketBuffer;
     int size;
 
