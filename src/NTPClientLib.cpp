@@ -212,14 +212,18 @@ bool NTPClient::begin (String ntpServerName, int8_t timeZone, bool daylight, int
         DEBUGLOG ("Time sync not started\r\n");
         return false;
     }
-    if (udp_conn)
+
+    if (udp_conn) {
         udp = udp_conn;
-    else
+    }
+
+    if (!udp) {
 #if NETWORK_TYPE == NETWORK_W5100
         udp = new EthernetUDP ();
 #else
         udp = new WiFiUDP ();
 #endif
+    }
 
     //_timeZone = timeZone;
     setDayLight (daylight);

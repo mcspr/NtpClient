@@ -391,9 +391,9 @@ public:
 protected:
 
 #if NETWORK_TYPE == NETWORK_W5100
-    EthernetUDP *udp;
+    EthernetUDP *udp = nullptr;
 #elif NETWORK_TYPE == NETWORK_ESP8266 || NETWORK_TYPE == NETWORK_WIFI101 || NETWORK_TYPE == NETWORK_ESP32
-    WiFiUDP *udp;
+    WiFiUDP *udp = nullptr;
 #endif
     bool _daylight;             ///< Does this time zone have daylight saving?
     int8_t _timeZone = 0;       ///< Keep track of set time zone offset
