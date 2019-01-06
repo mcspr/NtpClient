@@ -127,7 +127,7 @@ boolean sendNTPpacket (IPAddress address, UDP *udp) {
 
 time_t NTPClient::getTime () {
     IPAddress timeServerIP; //NTP server IP address
-    char ntpPacketBuffer[NTP_PACKET_SIZE]; //Buffer to store response message
+    uint8_t ntpPacketBuffer[NTP_PACKET_SIZE]; //Buffer to store response message
 
 
     DEBUGLOG ("Starting UDP\n");
@@ -152,9 +152,13 @@ time_t NTPClient::getTime () {
     while (millis () - beginWait < ntpTimeout) {
         int size = udp->parsePacket ();
         if (size >= NTP_PACKET_SIZE) {
-            DEBUGLOG ("-- Receive NTP Response\n");
+            DEBUGLOG ("-- Received NTP Response, size:%u\n", size);
             udp->read (ntpPacketBuffer, NTP_PACKET_SIZE);  // read packet into the buffer
             time_t timeValue = decodeNtpMessage (ntpPacketBuffer);
+            if (timeValue == 0) {
+                break;
+            }
+
             setSyncInterval (getLongInterval ());
             if (!_firstSync) {
                 //    if (timeStatus () == timeSet)
@@ -443,15 +447,36 @@ boolean NTPClient::setNTPTimeout (uint16_t milliseconds) {
 
 }
 
+// --- First 32 bits ---
+// Leap Indicator: 2 bits
+// Version number: 3 bits
+// Mode:           3 bits
+// Stratum:        8 bits (0 invalid, 1 primary, 2-15 generic, 16 unsyncronized, 17..255 reserved)
+// Poll interval:  8 bits (signed, log2 seconds)
+// Precision:      8 bits (signed, log2 seconds)
+// ...
+// --- Last 64 bits ---
+// Transmit ts:    32 bits (unsigned, seconds since 1900)
+// Fraction:       32 bits (unsigned, not used here)
+time_t NTPClient::decodeNtpMessage (uint8_t *messageBuffer) {
+    // Discard invalid stratum values
+    unsigned long stratum = messageBuffer[1];
+    if ((stratum == 0) || (stratum >= 16)) {
+        DEBUGLOG ("-- ERROR: NTP packet stratum is invalid\n");
+        return 0;
+    }
 
-
-time_t NTPClient::decodeNtpMessage (char *messageBuffer) {
+    // Manually convert from network byte order
     unsigned long secsSince1900;
-    // convert four bytes starting at location 40 to a long integer
     secsSince1900 = (unsigned long)messageBuffer[40] << 24;
     secsSince1900 |= (unsigned long)messageBuffer[41] << 16;
     secsSince1900 |= (unsigned long)messageBuffer[42] << 8;
     secsSince1900 |= (unsigned long)messageBuffer[43];
+
+    if (secsSince1900 == 0) {
+        DEBUGLOG ("-- ERROR: NTP packet timestamp is 0\n");
+        return 0;
+    }
 
 #define SEVENTY_YEARS 2208988800UL
     time_t timeTemp = secsSince1900 - SEVENTY_YEARS + _timeZone * SECS_PER_HOUR + _minutesOffset * SECS_PER_MIN;

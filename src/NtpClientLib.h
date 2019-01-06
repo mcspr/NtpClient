@@ -440,7 +440,7 @@ public:
     * @param[in] Pointer to message buffer.
     * @param[out] Decoded time from message, 0 if error ocurred.
     */
-    time_t decodeNtpMessage (char *messageBuffer);
+    time_t decodeNtpMessage (uint8_t *messageBuffer);
 
     /**
     * Set last successful synchronization time.
