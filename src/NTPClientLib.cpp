@@ -447,6 +447,13 @@ boolean NTPClient::setNTPTimeout (uint16_t milliseconds) {
 
 }
 
+// @mcspr:
+// Extended checks for packet validity:
+// - stratum value
+// - non-zero transmit timestamp
+// - additional checks from https://github.com/ropg/ezTime/pull/33
+//   compare reference and receive timestamps, make sure they are in chronological order
+
 // --- First 32 bits ---
 // Leap Indicator: 2 bits
 // Version number: 3 bits
@@ -455,10 +462,15 @@ boolean NTPClient::setNTPTimeout (uint16_t milliseconds) {
 // Poll interval:  8 bits (signed, log2 seconds)
 // Precision:      8 bits (signed, log2 seconds)
 // ...
-// --- Last 64 bits ---
+// --- Last 192 bits ---
+// Reference ts:   32 bits (unsigned, seconds since 1900)
+// ts fraction:    32 bits (unsigned, not used here)
+// Receive ts:     32 bits (unsigned, seconds since 1900)
+// ts fraction:    32 bits (unsigned, not used here)
 // Transmit ts:    32 bits (unsigned, seconds since 1900)
-// Fraction:       32 bits (unsigned, not used here)
+// ts Fraction:    32 bits (unsigned, not used here)
 time_t NTPClient::decodeNtpMessage (uint8_t *messageBuffer) {
+
     // Discard invalid stratum values
     unsigned long stratum = messageBuffer[1];
     if ((stratum == 0) || (stratum >= 16)) {
@@ -466,12 +478,28 @@ time_t NTPClient::decodeNtpMessage (uint8_t *messageBuffer) {
         return 0;
     }
 
-    // Manually convert from network byte order
-    unsigned long secsSince1900;
-    secsSince1900 = (unsigned long)messageBuffer[40] << 24;
-    secsSince1900 |= (unsigned long)messageBuffer[41] << 16;
-    secsSince1900 |= (unsigned long)messageBuffer[42] << 8;
-    secsSince1900 |= (unsigned long)messageBuffer[43];
+    uint32_t high, low;
+
+    // reference timestamp
+    high = (messageBuffer[16] << 8 | messageBuffer[17]) & 0x0000FFFF;
+    low = (messageBuffer[18] << 8 | messageBuffer[19]) & 0x0000FFFF;
+    uint32_t reference = high << 16 | low;
+
+    // receive timestamp
+    high = (messageBuffer[32] << 8 | messageBuffer[33]) & 0x0000FFFF;
+    high = (messageBuffer[34] << 8 | messageBuffer[35]) & 0x0000FFFF;
+    uint32_t receive = high << 16 | low;
+
+    // transmit timestamp (<-- we are using this)
+    high = (messageBuffer[40] << 8 | messageBuffer[41]) & 0x0000FFFF;
+    low = (messageBuffer[42] << 8 | messageBuffer[43]) & 0x0000FFFF;
+    uint32_t secsSince1900 = high << 16 | low;
+
+    if ((reference == 0) or (receive == 0) or (receive > secsSince1900)) {
+        DEBUGLOG ("-- ERROR: NTP timestamps are invalid! reference:%u receive:%u transmit:%u\n",
+                   reference, receive, secsSince1900);
+        return 0;
+    }
 
     if (secsSince1900 == 0) {
         DEBUGLOG ("-- ERROR: NTP packet timestamp is 0\n");
